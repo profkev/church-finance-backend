@@ -9,14 +9,16 @@ const reportRoutes = require('./routes/reportRoutes');
 const balanceRoutes = require('./routes/balanceRoutes');
 const voteheadRoutes = require('./routes/voteheadRoutes');
 const auditRoutes = require('./routes/auditRoutes');
-
+const app = express();
 
 
 
 
 const cors = require('cors');
+app.use(cors({ origin: 'http://localhost:3000' }));
 
-const app = express();
+
+
 
 // Middleware
 app.use(cors());
