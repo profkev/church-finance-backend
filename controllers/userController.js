@@ -77,4 +77,16 @@ exports.getUsers = async (req, res) => {
       res.status(500).json({ message: error.message });
     }
   };
+  // userController.js
+exports.getUserDetails = (req, res) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+  
+    res.status(200).json({
+      id: req.user.id,
+      name: req.user.name,
+      role: req.user.role,
+    });
+  };
   
