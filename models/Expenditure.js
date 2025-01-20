@@ -1,12 +1,12 @@
 const mongoose = require('mongoose');
 
 const expenditureSchema = new mongoose.Schema({
-  category: { type: String, required: true },
+  category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
   amount: { type: Number, required: true },
-  description: { type: String },
-  date: { type: Date, default: Date.now },
-  year: { type: Number, required: true }
-}, { timestamps: true });
+  description: { type: String, required: true },
+  year: { type: Number, default: new Date().getFullYear() },
+  createdAt: { type: Date, default: Date.now },
+  user: { type: String, required: true }, // Store user name from `req.user`
+});
 
-const Expenditure = mongoose.model('Expenditure', expenditureSchema);
-module.exports = Expenditure;
+module.exports = mongoose.model('Expenditure', expenditureSchema);
