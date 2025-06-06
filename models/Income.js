@@ -2,11 +2,11 @@ const mongoose = require('mongoose');
 
 const incomeSchema = new mongoose.Schema(
   {
-    votehead: { type: mongoose.Schema.Types.ObjectId, ref: 'Votehead', required: true }, // Reference to Votehead
+    revenueSource: { type: mongoose.Schema.Types.ObjectId, ref: 'RevenueSource', required: true }, // Reference to RevenueSource
     amount: { type: Number, required: true },
     description: { type: String },
     user: { type: String, required: true }, // Add user field
-
+    assetAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true }, // Asset account (Cash/Bank)
     date: { type: Date, default: Date.now },
     year: { type: Number, required: true },
   },

@@ -2,287 +2,301 @@ const Income = require('../models/Income');
 const Expenditure = require('../models/Expenditure');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
-
+const moment = require('moment');
 
 // Fetch report data for income and expenditure
 exports.getReports = async (req, res) => {
   try {
-    const { type, filter, month, year } = req.query;
-
-    if (!type || (type !== 'income' && type !== 'expenditure')) {
-      return res.status(400).json({ message: 'Invalid type. Use income or expenditure.' });
+    const { type, filter, startDate, endDate } = req.query;
+    if (!['income', 'expenditure'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid report type' });
     }
-
-    let records = type === 'income'
-      ? await Income.find().populate('votehead', 'name')
-      : await Expenditure.find().populate('category', 'name');
-
-    if (filter === 'monthly' && month && year) {
-      records = records.filter((record) => {
-        const recordDate = new Date(record.createdAt);
-        return (
-          recordDate.getMonth() + 1 === parseInt(month) &&
-          recordDate.getFullYear() === parseInt(year)
-        );
-      });
+    let query = {};
+    if (type === 'income') {
+      query.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
+    } else {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
     }
-
+    let records;
+    if (type === 'income') {
+      records = await Income.find(query).populate('revenueSource').sort({ date: -1 });
+    } else {
+      records = await Expenditure.find(query).populate('votehead').sort({ createdAt: -1 });
+    }
     res.status(200).json({ records });
   } catch (error) {
-    console.error('Error fetching reports:', error.message);
-    res.status(500).json({ message: 'Failed to fetch reports. Please try again later.' });
+    res.status(500).json({ message: error.message });
   }
 };
 
 // Fetch aggregated data for reports
 exports.getAggregatedReports = async (req, res) => {
   try {
-    const { type } = req.query;
-
-    if (!type || (type !== 'income' && type !== 'expenditure')) {
-      return res.status(400).json({ message: 'Invalid type. Use income or expenditure.' });
+    const { type, startDate, endDate } = req.query;
+    if (!['income', 'expenditure'].includes(type)) {
+      return res.status(400).json({ message: 'Invalid report type' });
     }
-
-    let aggregatedData = type === 'income'
-      ? await Income.aggregate([
-          { $group: { _id: '$votehead', totalAmount: { $sum: '$amount' } } },
-          { $lookup: { from: 'voteheads', localField: '_id', foreignField: '_id', as: 'votehead' } },
-          { $unwind: '$votehead' },
-          { $project: { name: '$votehead.name', totalAmount: 1 } },
-        ])
-      : await Expenditure.aggregate([
-          { $group: { _id: '$category', totalAmount: { $sum: '$amount' } } },
-          { $lookup: { from: 'categories', localField: '_id', foreignField: '_id', as: 'category' } },
-          { $unwind: '$category' },
-          { $project: { name: '$category.name', totalAmount: 1 } },
-        ]);
-
-    res.status(200).json({ aggregatedData });
-  } catch (error) {
-    console.error('Error fetching aggregated reports:', error.message);
-    res.status(500).json({ message: 'Failed to fetch aggregated reports.' });
-  }
-};
-
-// Download data as Excel
-exports.downloadOriginalData = async (req, res) => {
-  try {
-    const { type } = req.query;
-
-    if (!type || (type !== 'income' && type !== 'expenditure')) {
-      return res.status(400).json({ message: 'Invalid type. Use income or expenditure.' });
+    let matchStage = {};
+    if (type === 'income') {
+      matchStage.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
+    } else {
+      matchStage.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
     }
-
-    const records = type === 'income'
-      ? await Income.find().populate('votehead', 'name')
-      : await Expenditure.find().populate('category', 'name');
-
-    if (records.length === 0) {
-      return res.status(404).json({ message: `No ${type} records found to download.` });
+    let groupField, lookupField, model;
+    if (type === 'income') {
+      groupField = 'revenueSource';
+      lookupField = 'revenuesources';
+      model = Income;
+    } else {
+      groupField = 'votehead';
+      lookupField = 'voteheads';
+      model = Expenditure;
     }
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(`${type} Report`);
-    const isIncome = type === 'income';
-
-    // Define worksheet columns
-    worksheet.columns = [
-      { header: 'ID', key: '_id', width: 30 },
-      { header: isIncome ? 'Votehead' : 'Category', key: 'name', width: 25 },
-      { header: 'Amount', key: 'amount', width: 15 },
-      { header: 'Description', key: 'description', width: 30 },
-      { header: 'Year', key: 'year', width: 10 },
-      { header: 'Created At', key: 'createdAt', width: 25 },
-    ];
-
-    // Add data rows to the worksheet
-    records.forEach((record) => {
-      worksheet.addRow({
-        _id: record._id,
-        name: record[isIncome ? 'votehead' : 'category']?.name || 'N/A',
-        amount: record.amount,
-        description: record.description,
-        year: record.year,
-        createdAt: record.createdAt.toISOString(),
-      });
-    });
-
-    // Set headers for file download
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${type}_original_data.xlsx`);
-
-    // Write workbook to response
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error('Error downloading original data:', error.message);
-    res.status(500).json({ message: 'Failed to download original data.' });
-  }
-};
-
-
-// Download data as PDF
-exports.downloadOriginalPDF = async (req, res) => {
-  try {
-    const { type } = req.query;
-
-    if (!type || (type !== 'income' && type !== 'expenditure')) {
-      return res.status(400).json({ message: 'Invalid type. Use income or expenditure.' });
-    }
-
-    const records = type === 'income'
-      ? await Income.find().populate('votehead', 'name')
-      : await Expenditure.find().populate('category', 'name');
-
-    if (records.length === 0) {
-      return res.status(404).json({ message: `No ${type} records found to download.` });
-    }
-
-    const doc = new PDFDocument();
-    const chunks = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(chunks);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${type}_original_data.pdf`);
-      res.send(pdfBuffer);
-    });
-
-    doc.fontSize(16).text(`${type.charAt(0).toUpperCase() + type.slice(1)} Original Data`, { align: 'center' });
-    doc.moveDown();
-
-    records.forEach((record) => {
-      doc.fontSize(12).text(`ID: ${record._id}`);
-      doc.text(`${type === 'income' ? 'Votehead' : 'Category'}: ${record[type === 'income' ? 'votehead' : 'category']?.name || 'N/A'}`);
-      doc.text(`Amount: ${record.amount}`);
-      doc.text(`Description: ${record.description}`);
-      doc.text(`Year: ${record.year}`);
-      doc.text(`Created At: ${record.createdAt}`);
-      doc.moveDown();
-    });
-
-    doc.end();
-  } catch (error) {
-    console.error('Error downloading original PDF:', error.message);
-    res.status(500).json({ message: 'Failed to download original PDF.' });
-  }
-};
-
-exports.downloadCombinedData = async (req, res) => {
-  try {
-    const { type, month, year } = req.query;
-    const validTypes = ['income', 'expenditure'];
-
-    if (!type || !validTypes.includes(type)) {
-      return res.status(400).json({ message: `Invalid type. Allowed values: ${validTypes.join(', ')}` });
-    }
-
-    // Fetch aggregated data
-    const aggregatedData = await getAggregatedData(type, month, year); // Assume this function is implemented
-
-    if (!aggregatedData || aggregatedData.length === 0) {
-      return res.status(404).json({ message: 'No data available for the selected filters.' });
-    }
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet(`${type} Combined Report`);
-
-    // Set headers
-    worksheet.columns = [
-      { header: 'Name', key: 'name', width: 25 },
-      { header: 'Total Amount', key: 'totalAmount', width: 15 },
-    ];
-
-    // Add data
-    aggregatedData.forEach((item) => {
-      worksheet.addRow({
-        name: item.name,
-        totalAmount: item.totalAmount,
-      });
-    });
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=${type}_combined_data.xlsx`);
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error('Error downloading combined data:', error.message);
-    res.status(500).json({ message: 'Failed to download combined data.' });
-  }
-};
-
-
-
-exports.downloadCombinedPDF = async (req, res) => {
-  try {
-    const { type, month, year } = req.query;
-
-    // Validate type
-    const validTypes = ['income', 'expenditure'];
-    if (!type || !validTypes.includes(type)) {
-      return res.status(400).json({ message: `Invalid type. Allowed values: ${validTypes.join(', ')}` });
-    }
-
-    // Build aggregation pipeline
-    const matchStage = {};
-    if (month && year) {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
-      matchStage.createdAt = { $gte: startDate, $lte: endDate };
-    }
-
-    const pipeline = [
+    const aggregatedData = await model.aggregate([
       { $match: matchStage },
       {
         $group: {
-          _id: type === 'income' ? '$votehead' : '$category',
-          totalAmount: { $sum: '$amount' },
-        },
+          _id: `$${groupField}`,
+          totalAmount: { $sum: '$amount' }
+        }
       },
       {
         $lookup: {
-          from: type === 'income' ? 'voteheads' : 'categories',
+          from: lookupField,
           localField: '_id',
           foreignField: '_id',
-          as: 'name',
-        },
+          as: 'details'
+        }
       },
-      { $unwind: '$name' },
-      { $project: { name: '$name.name', totalAmount: 1 } },
-    ];
-
-    const model = type === 'income' ? Income : Expenditure;
-    const aggregatedData = await model.aggregate(pipeline);
-
-    if (!aggregatedData || aggregatedData.length === 0) {
-      return res.status(404).json({ message: 'No data found for the selected criteria.' });
-    }
-
-    // Generate PDF
-    const doc = new PDFDocument();
-    const chunks = [];
-    doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', () => {
-      const pdfBuffer = Buffer.concat(chunks);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename=${type}_combined_data.pdf`);
-      res.send(pdfBuffer);
-    });
-
-    // Write PDF content
-    doc.fontSize(16).text(`${type.charAt(0).toUpperCase() + type.slice(1)} Combined Data`, { align: 'center' });
-    doc.moveDown();
-
-    aggregatedData.forEach((record, index) => {
-      doc.fontSize(12).text(`${index + 1}. Name: ${record.name}`);
-      doc.text(`Total Amount: ${record.totalAmount}`);
-      doc.moveDown();
-    });
-
-    doc.end();
+      {
+        $project: {
+          name: { $arrayElemAt: ['$details.name', 0] },
+          totalAmount: 1,
+          _id: 0
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+    res.status(200).json({ aggregatedData });
   } catch (error) {
-    console.error('Error downloading combined PDF:', error.message);
-    res.status(500).json({ message: 'Failed to download combined PDF.' });
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Download reports in PDF or Excel format
+exports.downloadReport = async (req, res) => {
+  try {
+    const { type, format, startDate, endDate } = req.query;
+    let query = {};
+    if (type === 'income') {
+      query.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
+    } else {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      };
+    }
+    let records;
+    if (type === 'income') {
+      records = await Income.find(query).populate('revenueSource').sort({ date: -1 });
+    } else {
+      records = await Expenditure.find(query).populate('votehead').sort({ createdAt: -1 });
+    }
+    if (format === 'pdf') {
+      const doc = new PDFDocument({ margin: 50 });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}_report.pdf`);
+      doc.pipe(res);
+      doc.fontSize(20).text(`${type.charAt(0).toUpperCase() + type.slice(1)} Report`, { align: 'center' });
+    doc.moveDown();
+      doc.fontSize(12).text(`Period: ${moment(startDate).format('MMM D, YYYY')} - ${moment(endDate).format('MMM D, YYYY')}`, { align: 'center' });
+      doc.moveDown();
+      const headers = ['Date', type === 'income' ? 'Revenue Source' : 'Votehead', 'Amount', 'Description'];
+      const columnWidths = [100, 150, 100, 200];
+      let y = 150;
+      doc.fontSize(10);
+      headers.forEach((header, i) => {
+        doc.text(header, 50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), y);
+      });
+      y += 20;
+      records.forEach(record => {
+        if (y > 700) {
+          doc.addPage();
+          y = 50;
+        }
+        doc.text(moment(record.createdAt).format('MMM D, YYYY'), 50, y);
+        doc.text(type === 'income' ? record.revenueSource?.name || 'N/A' : record.votehead?.name || 'N/A', 150, y);
+        doc.text(record.amount.toFixed(2), 300, y);
+        doc.text(record.description || 'N/A', 400, y);
+        y += 20;
+      });
+      const total = records.reduce((sum, record) => sum + record.amount, 0);
+      doc.moveDown();
+      doc.fontSize(12).text(`Total: ${total.toFixed(2)}`, { align: 'right' });
+    doc.end();
+    } else {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet(`${type} Report`);
+      worksheet.mergeCells('A1:D1');
+      worksheet.getCell('A1').value = `${type.charAt(0).toUpperCase() + type.slice(1)} Report`;
+      worksheet.getCell('A1').font = { size: 16, bold: true };
+      worksheet.getCell('A1').alignment = { horizontal: 'center' };
+      worksheet.mergeCells('A2:D2');
+      worksheet.getCell('A2').value = `Period: ${moment(startDate).format('MMM D, YYYY')} - ${moment(endDate).format('MMM D, YYYY')}`;
+      worksheet.getCell('A2').alignment = { horizontal: 'center' };
+      const headers = ['Date', type === 'income' ? 'Revenue Source' : 'Votehead', 'Amount', 'Description'];
+      worksheet.addRow(headers);
+      worksheet.getRow(3).font = { bold: true };
+      worksheet.getRow(3).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      records.forEach(record => {
+        worksheet.addRow([
+          moment(record.createdAt).format('MMM D, YYYY'),
+          type === 'income' ? record.revenueSource?.name || 'N/A' : record.votehead?.name || 'N/A',
+          record.amount,
+          record.description || 'N/A'
+        ]);
+      });
+      const total = records.reduce((sum, record) => sum + record.amount, 0);
+      worksheet.addRow(['', '', total, '']);
+      worksheet.getCell(`C${records.length + 4}`).font = { bold: true };
+      worksheet.getColumn(1).width = 15;
+      worksheet.getColumn(2).width = 25;
+      worksheet.getColumn(3).width = 15;
+      worksheet.getColumn(4).width = 40;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}_report.xlsx`);
+    await workbook.xlsx.write(res);
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Download aggregated reports in PDF or Excel format
+exports.downloadAggregatedReport = async (req, res) => {
+  try {
+    const { type, format, startDate, endDate } = req.query;
+    const matchStage = {
+      createdAt: {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate + 'T23:59:59.999Z')
+      }
+    };
+    let groupField, lookupField, model;
+    if (type === 'income') {
+      groupField = 'revenueSource';
+      lookupField = 'revenuesources';
+      model = Income;
+    } else {
+      groupField = 'votehead';
+      lookupField = 'voteheads';
+      model = Expenditure;
+    }
+    const aggregatedData = await model.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: `$${groupField}`,
+          totalAmount: { $sum: '$amount' }
+        }
+      },
+      {
+        $lookup: {
+          from: lookupField,
+          localField: '_id',
+          foreignField: '_id',
+          as: 'details'
+        }
+      },
+      {
+        $project: {
+          name: { $arrayElemAt: ['$details.name', 0] },
+          totalAmount: 1,
+          _id: 0
+        }
+      },
+      { $sort: { name: 1 } }
+    ]);
+    if (format === 'pdf') {
+      const doc = new PDFDocument({ margin: 50 });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}_aggregated_report.pdf`);
+      doc.pipe(res);
+      doc.fontSize(20).text(`${type.charAt(0).toUpperCase() + type.slice(1)} Summary Report`, { align: 'center' });
+    doc.moveDown();
+      doc.fontSize(12).text(`Period: ${moment(startDate).format('MMM D, YYYY')} - ${moment(endDate).format('MMM D, YYYY')}`, { align: 'center' });
+      doc.moveDown();
+      const headers = [type === 'income' ? 'Revenue Source' : 'Votehead', 'Total Amount'];
+      const columnWidths = [300, 200];
+      let y = 150;
+      doc.fontSize(10);
+      headers.forEach((header, i) => {
+        doc.text(header, 50 + columnWidths.slice(0, i).reduce((a, b) => a + b, 0), y);
+      });
+      y += 20;
+      aggregatedData.forEach(item => {
+        if (y > 700) {
+          doc.addPage();
+          y = 50;
+        }
+        doc.text(item.name, 50, y);
+        doc.text(item.totalAmount.toFixed(2), 350, y);
+        y += 20;
+      });
+      const total = aggregatedData.reduce((sum, item) => sum + item.totalAmount, 0);
+      doc.moveDown();
+      doc.fontSize(12).text(`Total: ${total.toFixed(2)}`, { align: 'right' });
+    doc.end();
+    } else {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet(`${type} Summary`);
+      worksheet.mergeCells('A1:B1');
+      worksheet.getCell('A1').value = `${type.charAt(0).toUpperCase() + type.slice(1)} Summary Report`;
+      worksheet.getCell('A1').font = { size: 16, bold: true };
+      worksheet.getCell('A1').alignment = { horizontal: 'center' };
+      worksheet.mergeCells('A2:B2');
+      worksheet.getCell('A2').value = `Period: ${moment(startDate).format('MMM D, YYYY')} - ${moment(endDate).format('MMM D, YYYY')}`;
+      worksheet.getCell('A2').alignment = { horizontal: 'center' };
+      const headers = [type === 'income' ? 'Revenue Source' : 'Votehead', 'Total Amount'];
+      worksheet.addRow(headers);
+      worksheet.getRow(3).font = { bold: true };
+      worksheet.getRow(3).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E0E0' }
+      };
+      aggregatedData.forEach(item => {
+        worksheet.addRow([item.name, item.totalAmount]);
+      });
+      const total = aggregatedData.reduce((sum, item) => sum + item.totalAmount, 0);
+      worksheet.addRow(['Total', total]);
+      worksheet.getCell(`B${aggregatedData.length + 4}`).font = { bold: true };
+      worksheet.getColumn(1).width = 40;
+      worksheet.getColumn(2).width = 20;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${type}_aggregated_report.xlsx`);
+      await workbook.xlsx.write(res);
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

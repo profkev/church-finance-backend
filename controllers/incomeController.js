@@ -1,26 +1,57 @@
 const Income = require('../models/Income');
+const RevenueSource = require('../models/RevenueSource');
+const JournalEntry = require('../models/JournalEntry');
+
 exports.addIncome = async (req, res) => {
-    try {
-      console.log('User Object in addIncome:', req.user); // Debugging log for req.user
-      if (!req.user) {
-        throw new Error('User not authenticated'); // Explicit error if req.user is undefined
-      }
-  
-      const { votehead, amount, description, year } = req.body;
-      const user = req.user.name; // Retrieve user name from req.user
-      const income = new Income({ votehead, amount, description, year, user });
-      await income.save();
-      res.status(201).json({ message: 'Income added successfully', income });
-    } catch (error) {
-      console.error('Error in addIncome:', error.message); // Debugging log
-      res.status(500).json({ message: error.message });
+  try {
+    if (!req.user) {
+      throw new Error('User not authenticated');
     }
-  };
-  
+    const { revenueSource, amount, description, year, assetAccount } = req.body;
+    const user = req.user.name;
+    // Save the income record
+    const income = new Income({ revenueSource, amount, description, year, user, assetAccount });
+    await income.save();
+    // Fetch the revenue source to get the linked revenue account
+    const revenueSourceDoc = await RevenueSource.findById(revenueSource).populate('account');
+    if (!revenueSourceDoc || !revenueSourceDoc.account) {
+      return res.status(400).json({ message: 'Revenue source is not linked to a revenue account.' });
+    }
+    // Create the journal entry
+    const journalEntry = new JournalEntry({
+      date: new Date(),
+      reference: `INC-${income._id}`,
+      description: description || `Income for ${revenueSourceDoc.name}`,
+      entries: [
+        {
+          account: assetAccount,
+          debit: amount,
+          credit: 0,
+          description: 'Income received'
+        },
+        {
+          account: revenueSourceDoc.account,
+          debit: 0,
+          credit: amount,
+          description: 'Income recognized'
+        }
+      ],
+      totalDebit: amount,
+      totalCredit: amount,
+      status: 'posted',
+      createdBy: user
+    });
+    await journalEntry.save();
+    res.status(201).json({ message: 'Income added successfully', income });
+  } catch (error) {
+    console.error('Error in addIncome:', error.message);
+    res.status(500).json({ message: error.message });
+  }
+};
 
 exports.getIncomes = async (req, res) => {
   try {
-    const incomes = await Income.find().populate('votehead', 'name'); // Populate votehead with its name
+    const incomes = await Income.find().populate('revenueSource', 'name'); // Populate revenueSource with its name
     res.status(200).json({ incomes });
   } catch (error) {
     res.status(500).json({ message: error.message });

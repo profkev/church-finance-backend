@@ -1,4 +1,6 @@
 const Expenditure = require('../models/Expenditure');
+const Votehead = require('../models/Votehead');
+const JournalEntry = require('../models/JournalEntry');
 
 exports.addExpenditure = async (req, res) => {
   try {
@@ -8,12 +10,44 @@ exports.addExpenditure = async (req, res) => {
       throw new Error('User not authenticated'); // Explicit error if req.user is undefined
     }
 
-    const { category, amount, description, year } = req.body;
+    const { votehead, amount, description, year, assetAccount } = req.body;
     const user = req.user.name; // Retrieve user name from req.user
 
     // Create a new Expenditure record
-    const expenditure = new Expenditure({ category, amount, description, year, user });
+    const expenditure = new Expenditure({ votehead, amount, description, year, user, assetAccount });
     await expenditure.save();
+
+    // Fetch the votehead to get the linked expense account
+    const voteheadDoc = await Votehead.findById(votehead).populate('account');
+    if (!voteheadDoc || !voteheadDoc.account) {
+      return res.status(400).json({ message: 'Votehead is not linked to an expense account.' });
+    }
+
+    // Create the journal entry
+    const journalEntry = new JournalEntry({
+      date: new Date(),
+      reference: `EXP-${expenditure._id}`,
+      description: description || `Expenditure for ${voteheadDoc.name}`,
+      entries: [
+        {
+          account: voteheadDoc.account,
+          debit: amount,
+          credit: 0,
+          description: 'Expense incurred'
+        },
+        {
+          account: assetAccount,
+          debit: 0,
+          credit: amount,
+          description: 'Asset paid out'
+        }
+      ],
+      totalDebit: amount,
+      totalCredit: amount,
+      status: 'posted',
+      createdBy: user
+    });
+    await journalEntry.save();
 
     res.status(201).json({ message: 'Expenditure added successfully', expenditure });
   } catch (error) {
@@ -24,7 +58,7 @@ exports.addExpenditure = async (req, res) => {
 
 exports.getExpenditures = async (req, res) => {
   try {
-    const expenditures = await Expenditure.find().populate('category', 'name'); // Populate category with its name
+    const expenditures = await Expenditure.find().populate('votehead', 'name'); // Populate votehead with its name
     res.status(200).json({ expenditures });
   } catch (error) {
     res.status(500).json({ message: error.message });

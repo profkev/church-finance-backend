@@ -9,7 +9,10 @@ const reportRoutes = require('./routes/reportRoutes');
 const balanceRoutes = require('./routes/balanceRoutes');
 const voteheadRoutes = require('./routes/voteheadRoutes');
 const auditRoutes = require('./routes/auditRoutes');
-const categoryRoutes = require('./routes/categoryRoutes');
+const accountRoutes = require('./routes/accountRoutes');
+const journalEntryRoutes = require('./routes/journalEntryRoutes');
+const revenueSourceRoutes = require('./routes/revenueSourceRoutes');
+const accountingRoutes = require('./routes/accountingRoutes');
 const app = express();
 
 
@@ -45,7 +48,10 @@ app.use('/api/balance', balanceRoutes);
 app.use('/api/voteheads', voteheadRoutes);
 
 app.use('/api/audit', auditRoutes);
-app.use('/api/categories', categoryRoutes);
+app.use('/api/accounts', accountRoutes);
+app.use('/api/journal-entries', journalEntryRoutes);
+app.use('/api/revenue-sources', revenueSourceRoutes);
+app.use('/api/accounting', accountingRoutes);
 
 
 
