@@ -15,7 +15,8 @@ const revenueSourceSchema = new mongoose.Schema({
       },
       message: 'Account must be an active revenue account'
     }
-  }
+  },
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
 }, { timestamps: true });
 
 const RevenueSource = mongoose.model('RevenueSource', revenueSourceSchema);

@@ -15,7 +15,8 @@ const voteheadSchema = new mongoose.Schema({
       },
       message: 'Account must be an active expense account'
     }
-  }
+  },
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
 }, { timestamps: true });
 
 const Votehead = mongoose.model('Votehead', voteheadSchema);

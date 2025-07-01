@@ -19,7 +19,8 @@ const journalEntrySchema = new mongoose.Schema({
   },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  updatedAt: { type: Date, default: Date.now },
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
 });
 
 // Ensure totalDebit equals totalCredit

@@ -10,10 +10,10 @@ exports.addIncome = async (req, res) => {
     const { revenueSource, amount, description, year, assetAccount } = req.body;
     const user = req.user.name;
     // Save the income record
-    const income = new Income({ revenueSource, amount, description, year, user, assetAccount });
+    const income = new Income({ revenueSource, amount, description, year, user, assetAccount, tenantId: req.user.tenantId });
     await income.save();
     // Fetch the revenue source to get the linked revenue account
-    const revenueSourceDoc = await RevenueSource.findById(revenueSource).populate('account');
+    const revenueSourceDoc = await RevenueSource.findOne({_id: revenueSource, tenantId: req.user.tenantId}).populate('account');
     if (!revenueSourceDoc || !revenueSourceDoc.account) {
       return res.status(400).json({ message: 'Revenue source is not linked to a revenue account.' });
     }
@@ -39,7 +39,8 @@ exports.addIncome = async (req, res) => {
       totalDebit: amount,
       totalCredit: amount,
       status: 'posted',
-      createdBy: user
+      createdBy: user,
+      tenantId: req.user.tenantId
     });
     await journalEntry.save();
     res.status(201).json({ message: 'Income added successfully', income });
@@ -51,7 +52,7 @@ exports.addIncome = async (req, res) => {
 
 exports.getIncomes = async (req, res) => {
   try {
-    const incomes = await Income.find().populate('revenueSource', 'name'); // Populate revenueSource with its name
+    const incomes = await Income.find({ tenantId: req.user.tenantId }).populate('revenueSource', 'name'); // Populate revenueSource with its name
     res.status(200).json({ incomes });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -67,8 +68,8 @@ exports.updateIncome = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized. User not authenticated.' });
     }
 
-    const updatedIncome = await Income.findByIdAndUpdate(
-      id,
+    const updatedIncome = await Income.findOneAndUpdate(
+      { _id: id, tenantId: req.user.tenantId },
       { ...req.body, user: req.user.name }, // Update the user field
       { new: true }
     );
@@ -83,7 +84,7 @@ exports.updateIncome = async (req, res) => {
 exports.deleteIncome = async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedIncome = await Income.findByIdAndDelete(id);
+    const deletedIncome = await Income.findOneAndDelete({ _id: id, tenantId: req.user.tenantId });
     if (!deletedIncome) return res.status(404).json({ message: 'Income not found' });
     res.status(200).json({ message: 'Income deleted successfully', deletedIncome });
   } catch (error) {

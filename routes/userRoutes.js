@@ -1,15 +1,29 @@
 const express = require('express');
-const { register, login, getUsers, updateUserRole, getUserDetails} = require('../controllers/userController');
+const { 
+    register, 
+    login, 
+    inviteUser,
+    listUsers,
+    updateUser,
+    deleteUser,
+    getUserDetails 
+} = require('../controllers/userController');
 const authenticate = require('../middlewares/auth'); // Import authenticate middleware
 const roleMiddleware = require('../middlewares/role'); // Import roleMiddleware
 
 const router = express.Router();
 
+// Public routes
 router.post('/register', register);
 router.post('/login', login);
-router.get('/', authenticate, roleMiddleware('Special User'), getUsers);
-router.put('/:id', authenticate, roleMiddleware('Special User'), updateUserRole);
+
+// Authenticated route for any user
 router.get('/me', authenticate, getUserDetails);
 
+// Admin-only routes for user management
+router.post('/invite', authenticate, roleMiddleware('Admin'), inviteUser);
+router.get('/', authenticate, roleMiddleware('Admin'), listUsers);
+router.put('/:id', authenticate, roleMiddleware('Admin'), updateUser);
+router.delete('/:id', authenticate, roleMiddleware('Admin'), deleteUser);
 
 module.exports = router;

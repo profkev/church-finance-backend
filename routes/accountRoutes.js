@@ -5,7 +5,7 @@ const roleMiddleware = require('../middlewares/role');
 
 const router = express.Router();
 
-router.use(authenticate, roleMiddleware('Special User'));
+router.use(authenticate, roleMiddleware('Special User', 'Admin'));
 
 router.get('/', listAccounts);
 router.post('/', addAccount);

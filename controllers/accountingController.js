@@ -8,7 +8,8 @@ const Balance = require('../models/Balance');
 exports.getTrialBalance = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = {};
+    const { tenantId } = req.user;
+    const query = { tenantId };
     
     if (startDate && endDate) {
       query.date = {
@@ -17,7 +18,7 @@ exports.getTrialBalance = async (req, res) => {
       };
     }
 
-    const accounts = await Account.find({ isActive: true });
+    const accounts = await Account.find({ isActive: true, tenantId });
     const journalEntries = await JournalEntry.find({
       ...query,
       status: 'posted'
@@ -54,15 +55,16 @@ exports.getTrialBalance = async (req, res) => {
 exports.getIncomeExpenditureStatement = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = {};
+    const { tenantId } = req.user;
+    const query = { tenantId };
     if (startDate && endDate) {
       query.date = {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       };
     }
-    const revenueAccounts = await Account.find({ type: 'revenue', isActive: true });
-    const expenseAccounts = await Account.find({ type: 'expense', isActive: true });
+    const revenueAccounts = await Account.find({ type: 'revenue', isActive: true, tenantId });
+    const expenseAccounts = await Account.find({ type: 'expense', isActive: true, tenantId });
     const journalEntries = await JournalEntry.find({
       ...query,
       status: 'posted'
@@ -113,10 +115,11 @@ exports.getIncomeExpenditureStatement = async (req, res) => {
 // Get Balance Sheet
 exports.getBalanceSheet = async (req, res) => {
   try {
-    const assets = await Account.find({ type: 'asset', isActive: true });
-    const liabilities = await Account.find({ type: 'liability', isActive: true });
-    const equity = await Account.find({ type: 'equity', isActive: true });
-    const journalEntries = await JournalEntry.find({ status: 'posted' }).populate('entries.account');
+    const { tenantId } = req.user;
+    const assets = await Account.find({ type: 'asset', isActive: true, tenantId });
+    const liabilities = await Account.find({ type: 'liability', isActive: true, tenantId });
+    const equity = await Account.find({ type: 'equity', isActive: true, tenantId });
+    const journalEntries = await JournalEntry.find({ status: 'posted', tenantId }).populate('entries.account');
 
     const calculateBalance = (accounts) => {
       return accounts.map(account => {
@@ -164,17 +167,18 @@ exports.getBalanceSheet = async (req, res) => {
 exports.getCashFlowStatement = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = {};
+    const { tenantId } = req.user;
+    const query = { tenantId };
     if (startDate && endDate) {
       query.date = {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       };
     }
-    let cashAccount = await Account.findOne({ name: 'Cash', isActive: true });
+    let cashAccount = await Account.findOne({ name: 'Cash', isActive: true, tenantId });
     if (!cashAccount) {
       // Fallback: find any asset account with 'cash' in the name
-      cashAccount = await Account.findOne({ type: 'asset', name: /cash/i, isActive: true });
+      cashAccount = await Account.findOne({ type: 'asset', name: /cash/i, isActive: true, tenantId });
     }
     if (!cashAccount) {
       return res.status(404).json({ message: 'Cash account not found. Please ensure you have a cash account.' });
@@ -222,7 +226,8 @@ exports.getCashFlowStatement = async (req, res) => {
 exports.getGeneralLedger = async (req, res) => {
   try {
     const { startDate, endDate, accountId } = req.query;
-    const query = { status: 'posted' };
+    const { tenantId } = req.user;
+    const query = { status: 'posted', tenantId };
     
     if (startDate && endDate) {
       query.date = {

@@ -9,6 +9,7 @@ const incomeSchema = new mongoose.Schema(
     assetAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'Account', required: true }, // Asset account (Cash/Bank)
     date: { type: Date, default: Date.now },
     year: { type: Number, required: true },
+    tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
   },
   { timestamps: true }
 );

@@ -11,7 +11,7 @@ exports.getReports = async (req, res) => {
     if (!['income', 'expenditure'].includes(type)) {
       return res.status(400).json({ message: 'Invalid report type' });
     }
-    let query = {};
+    let query = { tenantId: req.user.tenantId };
     if (type === 'income') {
       query.date = {
         $gte: new Date(startDate),
@@ -42,14 +42,14 @@ exports.getAggregatedReports = async (req, res) => {
     if (!['income', 'expenditure'].includes(type)) {
       return res.status(400).json({ message: 'Invalid report type' });
     }
-    let matchStage = {};
+    let matchStage = { tenantId: req.user.tenantId };
     if (type === 'income') {
       matchStage.date = {
         $gte: new Date(startDate),
         $lte: new Date(endDate + 'T23:59:59.999Z')
       };
     } else {
-      matchStage.createdAt = {
+      matchStage.date = {
         $gte: new Date(startDate),
         $lte: new Date(endDate + 'T23:59:59.999Z')
       };
@@ -99,7 +99,7 @@ exports.getAggregatedReports = async (req, res) => {
 exports.downloadReport = async (req, res) => {
   try {
     const { type, format, startDate, endDate } = req.query;
-    let query = {};
+    let query = { tenantId: req.user.tenantId };
     if (type === 'income') {
       query.date = {
         $gte: new Date(startDate),
@@ -196,6 +196,7 @@ exports.downloadAggregatedReport = async (req, res) => {
   try {
     const { type, format, startDate, endDate } = req.query;
     const matchStage = {
+      tenantId: req.user.tenantId,
       createdAt: {
         $gte: new Date(startDate),
         $lte: new Date(endDate + 'T23:59:59.999Z')

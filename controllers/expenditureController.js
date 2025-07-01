@@ -10,22 +10,22 @@ exports.addExpenditure = async (req, res) => {
       throw new Error('User not authenticated'); // Explicit error if req.user is undefined
     }
 
-    const { votehead, amount, description, year, assetAccount } = req.body;
+    const { votehead, amount, description, year, assetAccount, date } = req.body;
     const user = req.user.name; // Retrieve user name from req.user
 
-    // Create a new Expenditure record
-    const expenditure = new Expenditure({ votehead, amount, description, year, user, assetAccount });
+    // Create a new Expenditure record, using the provided date or defaulting to now
+    const expenditure = new Expenditure({ votehead, amount, description, year, user, assetAccount, tenantId: req.user.tenantId, date: date || new Date() });
     await expenditure.save();
 
     // Fetch the votehead to get the linked expense account
-    const voteheadDoc = await Votehead.findById(votehead).populate('account');
+    const voteheadDoc = await Votehead.findOne({_id: votehead, tenantId: req.user.tenantId}).populate('account');
     if (!voteheadDoc || !voteheadDoc.account) {
       return res.status(400).json({ message: 'Votehead is not linked to an expense account.' });
     }
 
     // Create the journal entry
     const journalEntry = new JournalEntry({
-      date: new Date(),
+      date: expenditure.date,
       reference: `EXP-${expenditure._id}`,
       description: description || `Expenditure for ${voteheadDoc.name}`,
       entries: [
@@ -45,7 +45,8 @@ exports.addExpenditure = async (req, res) => {
       totalDebit: amount,
       totalCredit: amount,
       status: 'posted',
-      createdBy: user
+      createdBy: user,
+      tenantId: req.user.tenantId
     });
     await journalEntry.save();
 
@@ -58,7 +59,8 @@ exports.addExpenditure = async (req, res) => {
 
 exports.getExpenditures = async (req, res) => {
   try {
-    const expenditures = await Expenditure.find().populate('votehead', 'name'); // Populate votehead with its name
+    const expenditures = await Expenditure.find({ tenantId: req.user.tenantId })
+      .populate({ path: 'votehead', select: 'name', options: { strictPopulate: false } });
     res.status(200).json({ expenditures });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -73,8 +75,8 @@ exports.updateExpenditure = async (req, res) => {
       return res.status(401).json({ message: 'Unauthorized. User not authenticated.' });
     }
 
-    const updatedExpenditure = await Expenditure.findByIdAndUpdate(
-      id,
+    const updatedExpenditure = await Expenditure.findOneAndUpdate(
+      { _id: id, tenantId: req.user.tenantId },
       { ...req.body, user: req.user.name }, // Update the user field
       { new: true }
     );
@@ -89,7 +91,7 @@ exports.updateExpenditure = async (req, res) => {
 exports.deleteExpenditure = async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedExpenditure = await Expenditure.findByIdAndDelete(id);
+    const deletedExpenditure = await Expenditure.findOneAndDelete({ _id: id, tenantId: req.user.tenantId });
     if (!deletedExpenditure) return res.status(404).json({ message: 'Expenditure not found' });
     res.status(200).json({ message: 'Expenditure deleted successfully', deletedExpenditure });
   } catch (error) {

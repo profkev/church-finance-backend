@@ -4,7 +4,7 @@ const Account = require('../models/Account');
 // List all journal entries
 exports.listJournalEntries = async (req, res) => {
   try {
-    const entries = await JournalEntry.find().populate('entries.account').sort({ date: -1 });
+    const entries = await JournalEntry.find({ tenantId: req.user.tenantId }).populate('entries.account').sort({ date: -1 });
     res.status(200).json({ entries });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -15,7 +15,7 @@ exports.listJournalEntries = async (req, res) => {
 exports.getJournalEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const entry = await JournalEntry.findById(id).populate('entries.account');
+    const entry = await JournalEntry.findOne({ _id: id, tenantId: req.user.tenantId }).populate('entries.account');
     if (!entry) return res.status(404).json({ message: 'Journal entry not found' });
     res.status(200).json({ entry });
   } catch (error) {
@@ -44,7 +44,8 @@ exports.addJournalEntry = async (req, res) => {
       totalDebit,
       totalCredit,
       status: status || 'draft',
-      createdBy
+      createdBy,
+      tenantId: req.user.tenantId
     });
     await journalEntry.save();
     res.status(201).json({ message: 'Journal entry created', journalEntry });
