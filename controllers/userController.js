@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const sendMail = require('../config/email');
 
 const register = async (req, res) => {
   const { name, email, password, tenantName } = req.body;
@@ -66,6 +67,7 @@ const login = async (req, res) => {
           email: user.email,
           role: user.role,
           tenantId: user.tenantId,
+          mustChangePassword: user.mustChangePassword,
         },
       });
     } catch (error) {
@@ -112,9 +114,19 @@ const inviteUser = async (req, res) => {
             password, // The pre-save hook will hash this
             role,
             tenantId,
+            mustChangePassword: true,
         });
 
         await user.save();
+
+        // Send invitation email
+        await sendMail({
+          to: email,
+          subject: 'You have been invited to Church Accounting System',
+          text: `Hello ${name},\n\nYou have been invited to join the Church Accounting System.\n\nLogin email: ${email}\nTemporary password: ${password}\n\nPlease log in and change your password immediately.\n\nLogin URL: ${process.env.FRONTEND_URL || 'http://localhost:3000/login'}\n\nThank you!`,
+          html: `<p>Hello <b>${name}</b>,</p><p>You have been invited to join the <b>Church Accounting System</b>.</p><ul><li><b>Login email:</b> ${email}</li><li><b>Temporary password:</b> ${password}</li></ul><p>Please log in and <b>change your password immediately</b>.</p><p>Login URL: <a href="${process.env.FRONTEND_URL || 'http://localhost:3000/login'}">Login</a></p><p>Thank you!</p>`
+        });
+
         res.status(201).json({ message: 'User invited successfully', user });
     } catch (err) {
         console.error(err.message);

@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['User', 'Admin', 'Special User', 'Member'], default: 'User' },
   tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
+  mustChangePassword: { type: Boolean, default: true },
 }, { timestamps: true });
 
 // Password hashing before saving
