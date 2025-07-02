@@ -123,8 +123,8 @@ const inviteUser = async (req, res) => {
         await sendMail({
           to: email,
           subject: 'You have been invited to Church Accounting System',
-          text: `Hello ${name},\n\nYou have been invited to join the Church Accounting System.\n\nLogin email: ${email}\nTemporary password: ${password}\n\nPlease log in and change your password immediately.\n\nLogin URL: ${process.env.FRONTEND_URL || 'http://localhost:3000/login'}\n\nThank you!`,
-          html: `<p>Hello <b>${name}</b>,</p><p>You have been invited to join the <b>Church Accounting System</b>.</p><ul><li><b>Login email:</b> ${email}</li><li><b>Temporary password:</b> ${password}</li></ul><p>Please log in and <b>change your password immediately</b>.</p><p>Login URL: <a href="${process.env.FRONTEND_URL || 'http://localhost:3000/login'}">Login</a></p><p>Thank you!</p>`
+          text: `Hello ${name},\n\nYou have been invited to join the Church Accounting System.\n\nLogin email: ${email}\nTemporary password: ${password}\n\nPlease log in and change your password immediately.\n\nLogin URL: ${process.env.FRONTEND_URL || 'https://ackamune-fund-manager.vercel.app/login'}\n\nThank you!`,
+          html: `<p>Hello <b>${name}</b>,</p><p>You have been invited to join the <b>Church Accounting System</b>.</p><ul><li><b>Login email:</b> ${email}</li><li><b>Temporary password:</b> ${password}</li></ul><p>Please log in and <b>change your password immediately</b>.</p><p>Login URL: <a href=\"${process.env.FRONTEND_URL || 'https://ackamune-fund-manager.vercel.app/login'}\">Login</a></p><p>Thank you!</p>`
         });
 
         res.status(201).json({ message: 'User invited successfully', user });

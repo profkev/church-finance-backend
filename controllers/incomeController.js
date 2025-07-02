@@ -19,7 +19,7 @@ exports.addIncome = async (req, res) => {
     }
     // Create the journal entry
     const journalEntry = new JournalEntry({
-      date: new Date(),
+      date: income.date,
       reference: `INC-${income._id}`,
       description: description || `Income for ${revenueSourceDoc.name}`,
       entries: [
